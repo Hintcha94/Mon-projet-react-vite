@@ -215,7 +215,7 @@ const PayslipModal: React.FC<PayslipModalProps> = ({ isOpen, onClose, payslip })
               marginRight: '15px'
             }}>
               <img 
-                src="/images/team2.jpg" 
+                src="/images/logo1.jng" 
                 alt="Logo 2COMSYSTEMS" 
                 style={{ 
                   width: '100%', 
