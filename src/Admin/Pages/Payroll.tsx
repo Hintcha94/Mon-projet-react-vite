@@ -88,8 +88,8 @@ const Payroll: React.FC = () => {
     { value: '12', label: 'Décembre' }
   ];
 
-  // Génération des années (2024 à 2030)
-  const years = Array.from({ length: 7 }, (_, i) => (2024 + i).toString());
+  // Génération des années (2025 à 2030)
+  const years = Array.from({ length: 7 }, (_, i) => (2025 + i).toString());
 
   const currentPeriod = `${months.find(m => m.value === selectedMonth)?.label} ${selectedYear}`;
   const totalGross = employees.reduce((sum, emp) => sum + emp.grossSalary, 0);

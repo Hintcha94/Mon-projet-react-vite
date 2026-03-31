@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import BaseAdminLayout from '../../AdminLayout/BaseAdminLayout';
+import PayslipModal from './PayslipModal'; 
+import jsPDF from 'jspdf';
 
 interface Employee {
   id: number;
@@ -44,6 +46,8 @@ const EmployeeDetail: React.FC = () => {
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [loading, setLoading] = useState(true);
   const [contracts, setContracts] = useState<Contract[]>([]);
+  const [selectedPayslip, setSelectedPayslip] = useState<Payslip | null>(null);
+  const [showPayslipModal, setShowPayslipModal] = useState(false);
 
   // Charger les données de l'employé
   useEffect(() => {
@@ -195,13 +199,55 @@ const EmployeeDetail: React.FC = () => {
     }
   ];
 
+  // Fonction pour obtenir la couleur du badge selon le type de contrat
+  const getContractStyle = (contractType?: string) => {
+    if (!contractType) return { backgroundColor: '#e9ecef', color: '#495057' };
+    
+    const type = contractType.toLowerCase();
+    if (type.includes('cdi')) return { backgroundColor: '#d4edda', color: '#155724' };
+    if (type.includes('cdd')) return { backgroundColor: '#fff3cd', color: '#856404' };
+    if (type.includes('stage')) return { backgroundColor: '#d1ecf1', color: '#0c5460' };
+    return { backgroundColor: '#e9ecef', color: '#495057' };
+  };
+
+  // Fonction pour obtenir la couleur du badge selon le statut
+  const getStatusStyle = (status: string) => {
+    const statusLower = status.toLowerCase();
+    if (statusLower === 'actif') return { backgroundColor: '#d4edda', color: '#155724' };
+    if (statusLower === 'inactif') return { backgroundColor: '#f8d7da', color: '#721c24' };
+    if (statusLower === 'en cours' || statusLower === 'en-cours') return { backgroundColor: '#fff3cd', color: '#856404' };
+    return { backgroundColor: '#e9ecef', color: '#495057' };
+  };
+
+  // Fonction pour télécharger une fiche de paie simple
+  const downloadSimplePayslip = (payslip: Payslip) => {
+    const doc = new jsPDF();
+    
+    // En-tête
+    doc.setFontSize(16);
+    doc.text('FICHE DE PAIE', 105, 20, { align: 'center' });
+    
+    // Informations
+    doc.setFontSize(12);
+    doc.text(`Période: ${payslip.period}`, 20, 40);
+    doc.text(`Date d'émission: ${payslip.issueDate}`, 20, 50);
+    doc.text(`Employé: ${employee?.name}`, 20, 60);
+    doc.text(`Poste: ${employee?.position}`, 20, 70);
+    
+    // Salaire
+    doc.setFontSize(14);
+    doc.setTextColor(0, 100, 0);
+    doc.text(`NET À PAYER: ${payslip.netSalary.toLocaleString()} FCFA`, 20, 90);
+    
+    // Sauvegarder
+    doc.save(`fiche-paie-${employee?.name}-${payslip.period}.pdf`);
+  };
+
   if (loading) {
     return (
       <BaseAdminLayout>
-        <div className="employee-detail-page">
-          <div className="page-header">
-            <h1>Chargement...</h1>
-          </div>
+        <div style={{ padding: '20px' }}>
+          <h1>Chargement...</h1>
         </div>
       </BaseAdminLayout>
     );
@@ -210,16 +256,22 @@ const EmployeeDetail: React.FC = () => {
   if (!employee) {
     return (
       <BaseAdminLayout>
-        <div className="employee-detail-page">
-          <div className="page-header">
-            <h1>Employé non trouvé</h1>
-            <button 
-              className="btn btn-primary"
-              onClick={() => navigate('/admin/employees')}
-            >
-              Retour à la liste
-            </button>
-          </div>
+        <div style={{ padding: '20px' }}>
+          <h1>Employé non trouvé</h1>
+          <button 
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#007bff',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              marginTop: '10px'
+            }}
+            onClick={() => navigate('/admin/employees')}
+          >
+            Retour à la liste
+          </button>
         </div>
       </BaseAdminLayout>
     );
@@ -227,226 +279,525 @@ const EmployeeDetail: React.FC = () => {
 
   return (
     <BaseAdminLayout>
-      <div className="employee-detail-page">
-        <div className="page-header">
-          <div className="employee-main-info">
-            <h1>{employee.name}</h1>
-            <p>{employee.position}</p>
-            <div className="employee-details">
-              <span>ID Employé: {employee.id}</span>
-              <div className="status-badge">
-                Statut: <span className={`status ${employee.status.toLowerCase()}`}>
-                  {employee.status}
+      <div style={{ padding: '20px' }}>
+        {/* En-tête */}
+        <div style={{ 
+          background: 'white', 
+          padding: '20px', 
+          borderRadius: '8px',
+          marginBottom: '20px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+        }}>
+          <h1 style={{ margin: '0 0 10px 0', color: '#333' }}>{employee.name}</h1>
+          <p style={{ margin: '0 0 15px 0', color: '#666', fontSize: '18px' }}>{employee.position}</p>
+          
+          <div style={{ display: 'flex', gap: '15px', marginBottom: '15px' }}>
+            <span style={{ color: '#666' }}>ID Employé: {employee.id}</span>
+            <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+              <span style={{ color: '#666' }}>Statut:</span>
+              <span 
+                style={{
+                  padding: '4px 12px',
+                  borderRadius: '20px',
+                  fontSize: '12px',
+                  fontWeight: '500',
+                  ...getStatusStyle(employee.status)
+                }}
+              >
+                {employee.status}
+              </span>
+            </div>
+          </div>
+          
+          {/* Section Contrat dans l'en-tête */}
+          {employee.contractType && (
+            <div style={{ 
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              gap: '15px',
+              marginBottom: '20px',
+              padding: '15px',
+              backgroundColor: '#f8f9fa',
+              borderRadius: '6px'
+            }}>
+              <div>
+                <strong style={{ display: 'block', marginBottom: '5px', color: '#666' }}>Type de contrat:</strong>
+                <span 
+                  style={{
+                    padding: '4px 12px',
+                    borderRadius: '20px',
+                    fontSize: '12px',
+                    fontWeight: '500',
+                    display: 'inline-block',
+                    ...getContractStyle(employee.contractType)
+                  }}
+                >
+                  {employee.contractType}
                 </span>
               </div>
-            </div>
-            
-            {/* Section Contrat dans l'en-tête */}
-            {employee.contractType && (
-              <div className="contract-summary">
-                <div className="contract-info-item">
-                  <strong>Type de contrat:</strong>
-                  <span className={`contract-type ${employee.contractType.toLowerCase()}`}>
-                    {employee.contractType}
-                  </span>
+              
+              {employee.contractStartDate && (
+                <div>
+                  <strong style={{ display: 'block', marginBottom: '5px', color: '#666' }}>Début de contrat:</strong>
+                  <span>{formatFrenchDate(employee.contractStartDate)}</span>
                 </div>
-                {employee.contractStartDate && (
-                  <div className="contract-info-item">
-                    <strong>Début de contrat:</strong>
-                    <span>{formatFrenchDate(employee.contractStartDate)}</span>
-                  </div>
-                )}
-                {employee.salary && (
-                  <div className="contract-info-item">
-                    <strong>Salaire:</strong>
-                    <span className="salary-amount">{employee.salary.toLocaleString()} FCFA</span>
-                  </div>
-                )}
-              </div>
-            )}
-            
-            <div className="action-buttons">
-              <button className="btn btn-outline">Modifier</button>
-              <button className="btn btn-danger">Archiver</button>
+              )}
+              
+              {employee.salary && (
+                <div>
+                  <strong style={{ display: 'block', marginBottom: '5px', color: '#666' }}>Salaire:</strong>
+                  <span style={{ fontWeight: '600', color: '#28a745' }}>{employee.salary.toLocaleString()} FCFA</span>
+                </div>
+              )}
             </div>
+          )}
+          
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button 
+              style={{
+                padding: '8px 16px',
+                backgroundColor: 'white',
+                color: '#007bff',
+                border: '1px solid #007bff',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              Modifier
+            </button>
+            <button 
+              style={{
+                padding: '8px 16px',
+                backgroundColor: '#dc3545',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              Archiver
+            </button>
           </div>
         </div>
 
-        <div className="employee-tabs">
+        {/* Onglets */}
+        <div style={{ 
+          display: 'flex', 
+          gap: '1px',
+          marginBottom: '20px',
+          borderBottom: '1px solid #dee2e6'
+        }}>
           <button 
-            className={`tab-btn ${activeTab === 'info' ? 'active' : ''}`}
+            style={{
+              padding: '12px 24px',
+              backgroundColor: activeTab === 'info' ? '#007bff' : 'white',
+              color: activeTab === 'info' ? 'white' : '#495057',
+              border: '1px solid #dee2e6',
+              borderBottom: 'none',
+              cursor: 'pointer',
+              borderTopLeftRadius: '6px',
+              borderTopRightRadius: '6px',
+              fontWeight: '500'
+            }}
             onClick={() => setActiveTab('info')}
           >
             Informations Personnelles
           </button>
           <button 
-            className={`tab-btn ${activeTab === 'contracts' ? 'active' : ''}`}
+            style={{
+              padding: '12px 24px',
+              backgroundColor: activeTab === 'contracts' ? '#007bff' : 'white',
+              color: activeTab === 'contracts' ? 'white' : '#495057',
+              border: '1px solid #dee2e6',
+              borderBottom: 'none',
+              cursor: 'pointer',
+              fontWeight: '500'
+            }}
             onClick={() => setActiveTab('contracts')}
           >
             Contrats
           </button>
           <button 
-            className={`tab-btn ${activeTab === 'payslips' ? 'active' : ''}`}
+            style={{
+              padding: '12px 24px',
+              backgroundColor: activeTab === 'payslips' ? '#007bff' : 'white',
+              color: activeTab === 'payslips' ? 'white' : '#495057',
+              border: '1px solid #dee2e6',
+              borderBottom: 'none',
+              cursor: 'pointer',
+              fontWeight: '500'
+            }}
             onClick={() => setActiveTab('payslips')}
           >
             Fiches de Paie
           </button>
         </div>
 
-        <div className="tab-content">
+        {/* Contenu des onglets */}
+        <div>
           {activeTab === 'info' && (
-            <div className="personal-info card">
-              <h3>Informations Personnelles</h3>
-              <div className="info-grid">
-                <div className="info-section">
-                  <h4>Coordonnées</h4>
-                  <div className="info-item">
-                    <strong>Adresse e-mail:</strong>
-                    <a href={`mailto:${employee.email}`}>{employee.email}</a>
+            <div style={{ 
+              background: 'white', 
+              padding: '20px', 
+              borderRadius: '8px',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+            }}>
+              <h3 style={{ margin: '0 0 20px 0', color: '#333' }}>Informations Personnelles</h3>
+              <div style={{ 
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                gap: '20px'
+              }}>
+                <div>
+                  <h4 style={{ margin: '0 0 10px 0', color: '#444' }}>Coordonnées</h4>
+                  <div style={{ marginBottom: '10px' }}>
+                    <strong style={{ display: 'block', marginBottom: '5px', color: '#666' }}>Adresse e-mail:</strong>
+                    <a href={`mailto:${employee.email}`} style={{ color: '#007bff', textDecoration: 'none' }}>
+                      {employee.email}
+                    </a>
                   </div>
-                  <div className="info-item">
-                    <strong>Téléphone:</strong>
+                  <div style={{ marginBottom: '10px' }}>
+                    <strong style={{ display: 'block', marginBottom: '5px', color: '#666' }}>Téléphone:</strong>
                     {employee.phone}
                   </div>
-                  <div className="info-item">
-                    <strong>Département:</strong>
+                  <div>
+                    <strong style={{ display: 'block', marginBottom: '5px', color: '#666' }}>Département:</strong>
                     {employee.department}
                   </div>
                 </div>
 
-                <div className="info-section">
-                  <h4>Informations de contrat</h4>
-                  <div className="info-item">
-                    <strong>Type de contrat:</strong>
-                    <span className={`contract-type ${employee.contractType?.toLowerCase()}`}>
+                <div>
+                  <h4 style={{ margin: '0 0 10px 0', color: '#444' }}>Informations de contrat</h4>
+                  <div style={{ marginBottom: '10px' }}>
+                    <strong style={{ display: 'block', marginBottom: '5px', color: '#666' }}>Type de contrat:</strong>
+                    <span 
+                      style={{
+                        padding: '4px 12px',
+                        borderRadius: '20px',
+                        fontSize: '12px',
+                        fontWeight: '500',
+                        display: 'inline-block',
+                        ...getContractStyle(employee.contractType)
+                      }}
+                    >
                       {employee.contractType || "Non spécifié"}
                     </span>
                   </div>
-                  <div className="info-item">
-                    <strong>Date de début:</strong>
+                  <div style={{ marginBottom: '10px' }}>
+                    <strong style={{ display: 'block', marginBottom: '5px', color: '#666' }}>Date de début:</strong>
                     {employee.contractStartDate ? formatFrenchDate(employee.contractStartDate) : "Non spécifiée"}
                   </div>
                   {employee.salary && (
-                    <div className="info-item">
-                      <strong>Salaire:</strong>
+                    <div>
+                      <strong style={{ display: 'block', marginBottom: '5px', color: '#666' }}>Salaire:</strong>
                       {employee.salary.toLocaleString()} FCFA
                     </div>
                   )}
                 </div>
 
-                <div className="info-section">
-                  <h4>Adresse</h4>
-                  <div className="info-item">
-                    {employee.address}
-                  </div>
+                <div>
+                  <h4 style={{ margin: '0 0 10px 0', color: '#444' }}>Adresse</h4>
+                  <div style={{ color: '#333' }}>{employee.address}</div>
                 </div>
 
-                <div className="info-section">
-                  <h4>Date de naissance</h4>
-                  <div className="info-item">
-                    {employee.birthDate}
-                  </div>
+                <div>
+                  <h4 style={{ margin: '0 0 10px 0', color: '#444' }}>Date de naissance</h4>
+                  <div style={{ color: '#333' }}>{employee.birthDate}</div>
                 </div>
 
-                <div className="info-section">
-                  <h4>Contact d'urgence</h4>
-                  <table className="contact-table">
-                    <thead>
-                      <tr>
-                        <th>Nom complet</th>
-                        <th>Téléphone</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td>{employee.emergencyContact?.name}</td>
-                        <td>{employee.emergencyContact?.phone}</td>
-                      </tr>
-                    </tbody>
-                  </table>
+                <div>
+                  <h4 style={{ margin: '0 0 10px 0', color: '#444' }}>Contact d'urgence</h4>
+                  <div style={{ 
+                    border: '1px solid #dee2e6',
+                    borderRadius: '4px',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      borderBottom: '1px solid #dee2e6',
+                      backgroundColor: '#f8f9fa',
+                      padding: '10px',
+                      fontWeight: '600',
+                      color: '#495057'
+                    }}>
+                      <div>Nom complet</div>
+                      <div>Téléphone</div>
+                    </div>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      padding: '10px'
+                    }}>
+                      <div>{employee.emergencyContact?.name}</div>
+                      <div>{employee.emergencyContact?.phone}</div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
           {activeTab === 'contracts' && (
-            <div className="contracts-section card">
-              <div className="section-header">
-                <h3>Contrats</h3>
-                <button className="btn btn-primary">+ Nouveau contrat</button>
+            <div style={{ 
+              background: 'white', 
+              padding: '20px', 
+              borderRadius: '8px',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+            }}>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '20px'
+              }}>
+                <h3 style={{ margin: '0', color: '#333' }}>Contrats</h3>
+                <button 
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: '#007bff',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  + Nouveau contrat
+                </button>
               </div>
-              <table className="contracts-table">
-                <thead>
-                  <tr>
-                    <th>Type de contrat</th>
-                    <th>Date de début</th>
-                    <th>Date de fin</th>
-                    <th>Statut</th>
-                    <th>Signature</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {contracts.map(contract => (
-                    <tr key={contract.id}>
-                      <td>{contract.type}</td>
-                      <td>{contract.startDate}</td>
-                      <td>{contract.endDate}</td>
-                      <td>
-                        <span className={`status ${contract.status.toLowerCase().replace(' ', '-')}`}>
-                          {contract.status}
-                        </span>
-                      </td>
-                      <td>
-                        {contract.signed ? (
-                          <span className="signed">Signé</span>
-                        ) : (
-                          <button className="btn btn-sm btn-primary">Signer</button>
-                        )}
-                      </td>
-                      <td>
-                        <button className="btn btn-sm btn-outline">Voir</button>
-                        <button className="btn btn-sm btn-outline">Télécharger</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              
+              <div style={{ 
+                border: '1px solid #dee2e6',
+                borderRadius: '4px',
+                overflow: 'hidden'
+              }}>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(6, 1fr)',
+                  backgroundColor: '#f8f9fa',
+                  padding: '12px 16px',
+                  fontWeight: '600',
+                  color: '#495057',
+                  borderBottom: '1px solid #dee2e6'
+                }}>
+                  <div>Type de contrat</div>
+                  <div>Date de début</div>
+                  <div>Date de fin</div>
+                  <div>Statut</div>
+                  <div>Signature</div>
+                  <div>Actions</div>
+                </div>
+                
+                {contracts.map(contract => (
+                  <div 
+                    key={contract.id}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(6, 1fr)',
+                      padding: '12px 16px',
+                      borderBottom: '1px solid #dee2e6',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <div>{contract.type}</div>
+                    <div>{contract.startDate}</div>
+                    <div>{contract.endDate}</div>
+                    <div>
+                      <span 
+                        style={{
+                          padding: '4px 12px',
+                          borderRadius: '20px',
+                          fontSize: '12px',
+                          fontWeight: '500',
+                          display: 'inline-block',
+                          ...getStatusStyle(contract.status)
+                        }}
+                      >
+                        {contract.status}
+                      </span>
+                    </div>
+                    <div>
+                      {contract.signed ? (
+                        <span style={{ color: '#28a745', fontWeight: '500' }}>Signé</span>
+                      ) : (
+                        <button 
+                          style={{
+                            padding: '4px 12px',
+                            fontSize: '12px',
+                            backgroundColor: '#fff3cd',
+                            color: '#856404',
+                            border: '1px solid #ffc107',
+                            borderRadius: '4px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Signer
+                        </button>
+                      )}
+                    </div>
+                    <div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button 
+                          style={{
+                            padding: '6px 12px',
+                            fontSize: '13px',
+                            backgroundColor: 'white',
+                            color: '#007bff',
+                            border: '1px solid #007bff',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            minWidth: '70px'
+                          }}
+                        >
+                          Voir
+                        </button>
+                        <button 
+                          style={{
+                            padding: '6px 12px',
+                            fontSize: '13px',
+                            backgroundColor: 'white',
+                            color: '#28a745',
+                            border: '1px solid #28a745',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            minWidth: '100px'
+                          }}
+                        >
+                          Télécharger
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
           {activeTab === 'payslips' && (
-            <div className="payslips-section card">
-              <div className="section-header">
-                <h3>Fiches de Paie</h3>
-                <button className="btn btn-primary">+ Ajouter une fiche de paie</button>
+            <div style={{ 
+              background: 'white', 
+              padding: '20px', 
+              borderRadius: '8px',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+            }}>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '20px'
+              }}>
+                <h3 style={{ margin: '0', color: '#333' }}>Fiches de Paie</h3>
+                <button 
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: '#007bff',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  + Ajouter une fiche de paie
+                </button>
               </div>
-              <table className="payslips-table">
-                <thead>
-                  <tr>
-                    <th>PÉRIODE</th>
-                    <th>Date d'émission</th>
-                    <th>Net à payer</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {payslips.map(payslip => (
-                    <tr key={payslip.id}>
-                      <td>{payslip.period}</td>
-                      <td>{payslip.issueDate}</td>
-                      <td>{payslip.netSalary.toLocaleString()} FCFA</td>
-                      <td>
-                        <button className="btn btn-sm btn-outline">Télécharger</button>
-                        <button className="btn btn-sm btn-outline">Visualiser</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              
+              <div style={{ 
+                border: '1px solid #dee2e6',
+                borderRadius: '4px',
+                overflow: 'hidden'
+              }}>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(4, 1fr)',
+                  backgroundColor: '#f8f9fa',
+                  padding: '12px 16px',
+                  fontWeight: '600',
+                  color: '#495057',
+                  borderBottom: '1px solid #dee2e6'
+                }}>
+                  <div>PÉRIODE</div>
+                  <div>Date d'émission</div>
+                  <div>Net à payer</div>
+                  <div>Actions</div>
+                </div>
+                
+                {payslips.map(payslip => (
+                  <div 
+                    key={payslip.id}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(4, 1fr)',
+                      padding: '12px 16px',
+                      borderBottom: '1px solid #dee2e6',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <div>{payslip.period}</div>
+                    <div>{payslip.issueDate}</div>
+                    <div>{payslip.netSalary.toLocaleString()} FCFA</div>
+                    <div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button 
+                          onClick={() => downloadSimplePayslip(payslip)}
+                          style={{
+                            padding: '6px 12px',
+                            fontSize: '13px',
+                            backgroundColor: 'white',
+                            color: '#28a745',
+                            border: '1px solid #28a745',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            minWidth: '100px'
+                          }}
+                        >
+                          Télécharger
+                        </button>
+                        <button 
+                          onClick={() => {
+                            setSelectedPayslip(payslip);
+                            setShowPayslipModal(true);
+                          }}
+                          style={{
+                            padding: '6px 12px',
+                            fontSize: '13px',
+                            backgroundColor: 'white',
+                            color: '#6c757d',
+                            border: '1px solid #6c757d',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            minWidth: '90px'
+                          }}
+                        >
+                          Visualiser
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
+
+        {/* Modal pour visualiser la fiche de paie */}
+        {showPayslipModal && selectedPayslip && employee && (
+          <PayslipModal
+            isOpen={showPayslipModal}
+            onClose={() => {
+              setShowPayslipModal(false);
+              setSelectedPayslip(null);
+            }}
+            payslip={{
+              ...selectedPayslip,
+              employee: {
+                name: employee.name,
+                position: employee.position,
+                department: employee.department,
+                id: employee.id
+              }
+            }}
+          />
+        )}
       </div>
     </BaseAdminLayout>
   );

@@ -1710,7 +1710,7 @@ body {
 }
 
 .status.active, .status.actif {
-  background: #d4edda;
+  background: hsla(200, 10%, 94%, 0.411);
   color: #155724;
 }
 
